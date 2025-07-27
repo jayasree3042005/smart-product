@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Cart</title>
+  <link rel="stylesheet" href="home.css" />
+  <style>
+    #place-order-btn, #download-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #place-order-btn:hover, #download-btn:hover {
+      background-color: #0056b3;
+    }
+
+    #total-amount {
+      font-size: 18px;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    .remove-btn {
+      background-color: #dc3545;
+      color: white;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .remove-btn:hover {
+      background-color: #c82333;
+    }
+
+    #invoice-preview {
+      display: none;
+      border: 1px solid #ccc;
+      margin-top: 30px;
+      padding: 20px;
+      width: 80%;
+      background: #f9f9f9;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      border: 1px solid #888;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>Your Cart</h1>
+    <button onclick="window.location.href='home.html'">← Back to Home</button>
+  </header>
+
+  <main>
+    <section class="product-grid" id="cart-grid"></section>
+    <h3 id="total-amount">Total: ₹0</h3>
+
+    <button id="place-order-btn">Place Order</button>
+
+    <!-- Invoice preview -->
+    <div id="invoice-preview"></div>
+    <button id="download-btn" style="display:none;">Download Invoice</button>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2025 DressCart</p>
+  </footer>
+
+  <!-- Firebase cart logic -->
+  <script type="module" src="cart.js"></script>
+
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    window.jsPDF = window.jspdf.jsPDF;
+
+    const placeBtn = document.getElementById('place-order-btn');
+    const previewDiv = document.getElementById('invoice-preview');
+    const downloadBtn = document.getElementById('download-btn');
+
+    placeBtn.addEventListener('click', () => {
+      const cartGrid = document.getElementById('cart-grid');
+      const items = cartGrid.querySelectorAll('.product-card');
+      const totalText = document.getElementById('total-amount').innerText;
+
+      if (items.length === 0) {
+        alert('Your cart is empty.');
+        return;
+      }
+
+      let totalAmount = parseInt(totalText.replace(/[^0-9]/g, ''));
+      let invoiceHTML = `
+        <h2>DressCart — Invoice</h2>
+        <p><strong>Invoice #</strong> ${Date.now()}<br/>
+        <strong>Date:</strong> ${new Date().toLocaleString()}</p>
+        <h3>Items:</h3>
+        <table>
+          <tr><th>Item</th><th>Price</th><th>Qty</th></tr>
+      `;
+
+      items.forEach(item => {
+        const name = item.querySelector('h3').innerText;
+        const price = item.querySelector('p').innerText;
+        invoiceHTML += `<tr><td>${name}</td><td>${price}</td><td>1</td></tr>`;
+      });
+
+      invoiceHTML += `
+        </table>
+        <p><strong>Total:</strong> ₹${totalAmount}</p>
+        <p><strong>Delivery Charges:</strong> ₹50</p>
+        <p><strong>Grand Total:</strong> ₹${totalAmount + 50}</p>
+        <p>Thank you for your order!<br/>Please visit again.</p>
+      `;
+
+      previewDiv.innerHTML = invoiceHTML;
+      previewDiv.style.display = 'block';
+      downloadBtn.style.display = 'inline-block';
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const doc = new jsPDF();
+      const previewText = document.getElementById('invoice-preview').innerText;
+      doc.setFontSize(12);
+      doc.text(previewText, 20, 20, { maxWidth: 170 });
+      doc.save("DressCart_Invoice.pdf");
+    });
+  </script>
+</body>
+</html>

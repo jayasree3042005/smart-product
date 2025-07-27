@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dress Store | Home</title>
+
+  <!-- External Styles -->
+  <link rel="stylesheet" href="home.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Redirect to login if not logged in -->
+  <script type="module" src="protect.js"></script>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <h1>DressCart</h1>
+    <nav>
+      <button onclick="window.location.href='cart.html'">
+        <i class="fas fa-shopping-cart"></i> Cart
+      </button>
+      <button onclick="window.location.href='wishlist.html'">
+        <i class="fas fa-heart"></i> Wishlist
+      </button>
+      <button id="logout-btn">
+        Logout
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Product Grid -->
+  <main>
+    <h2 class="section-title">Featured Dresses</h2>
+    <section class="product-grid" id="product-grid">
+      <!-- Products will be injected here -->
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2025 DressCart. All Rights Reserved.</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="products.js"></script>
+  <script type="module" src="logout.js"></script>
+  <script type="module" src="wishlist.js"></script> <!-- optional JS if displaying wishlist in home -->
+  <script type="module" src="cart.js"></script>
+</body>
+</html>
