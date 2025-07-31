@@ -9,7 +9,8 @@ import {
   getDocs,
   addDoc,
   deleteDoc,
-  doc
+  doc,
+  setDoc
 } from "https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js";
 
 // Firebase config
@@ -22,7 +23,6 @@ const firebaseConfig = {
   appId: "1:643607180188:web:a5db7f7831f27fef418e59"
 };
 
-// Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -32,12 +32,15 @@ window.addEventListener("DOMContentLoaded", () => {
   const totalAmountDisplay = document.getElementById("total-amount");
   const placeOrderBtn = document.getElementById("place-order-btn");
 
-  if (!cartGrid || !totalAmountDisplay || !placeOrderBtn) {
-    console.error("Missing required HTML elements.");
-    return;
-  }
+  const itemQuantities = {};
 
-  let total = 0;
+  const updateTotal = () => {
+    let newTotal = 0;
+    for (const id in itemQuantities) {
+      newTotal += itemQuantities[id].price * itemQuantities[id].qty;
+    }
+    totalAmountDisplay.textContent = `Total: ₹${newTotal.toLocaleString()}`;
+  };
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
@@ -57,35 +60,66 @@ window.addEventListener("DOMContentLoaded", () => {
       snapshot.forEach((docSnap) => {
         const item = docSnap.data();
         const itemId = docSnap.id;
-        const itemPrice = Number(item.price) || 0;
+        const price = Number(item.price);
+        const qty = item.quantity || 1;
 
-        total += itemPrice;
+        itemQuantities[itemId] = { price, qty, ...item };
 
         const card = document.createElement("div");
         card.className = "product-card";
         card.innerHTML = `
           <img src="${item.image}" alt="${item.name}" />
           <h3>${item.name}</h3>
-          <p>₹${itemPrice.toLocaleString()}</p>
-          <button class="remove-btn" data-id="${itemId}" data-price="${itemPrice}">Remove</button>
+          <p>₹${price.toLocaleString()}</p>
+          <div class="quantity-controls">
+            <button class="qty-btn decrease" data-id="${itemId}">−</button>
+            <span id="qty-${itemId}" class="qty-count">${qty}</span>
+            <button class="qty-btn increase" data-id="${itemId}">+</button>
+          </div>
+          <button class="remove-btn" data-id="${itemId}">Remove</button>
         `;
         cartGrid.appendChild(card);
       });
 
-      totalAmountDisplay.textContent = `Total: ₹${total.toLocaleString()}`;
+      updateTotal();
     } catch (error) {
       console.error("Error loading cart:", error);
       cartGrid.innerHTML = "<p>Error loading cart. Try again later.</p>";
     }
   });
 
-  // Remove from cart
   document.addEventListener("click", async (e) => {
-    if (e.target.classList.contains("remove-btn")) {
-      const itemId = e.target.getAttribute("data-id");
-      const user = auth.currentUser;
-      if (!user) return;
+    const user = auth.currentUser;
+    if (!user) return;
 
+    const itemId = e.target.dataset.id;
+    if (!itemId) return;
+
+    const isIncrease = e.target.classList.contains("increase");
+    const isDecrease = e.target.classList.contains("decrease");
+
+    if (isIncrease || isDecrease) {
+      const item = itemQuantities[itemId];
+      let qty = item.qty;
+
+      if (isIncrease) qty++;
+      if (isDecrease && qty > 1) qty--;
+
+      item.qty = qty;
+      document.getElementById(`qty-${itemId}`).textContent = qty;
+      updateTotal();
+
+      try {
+        await setDoc(doc(db, "users", user.uid, "cart", itemId), {
+          ...item,
+          quantity: qty
+        });
+      } catch (error) {
+        console.error("Error updating quantity:", error);
+      }
+    }
+
+    if (e.target.classList.contains("remove-btn")) {
       try {
         await deleteDoc(doc(db, "users", user.uid, "cart", itemId));
         alert("Item removed!");
@@ -96,105 +130,82 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Place Order + Invoice
   placeOrderBtn.addEventListener("click", async () => {
     const user = auth.currentUser;
     if (!user) return;
 
+    const cartRef = collection(db, "users", user.uid, "cart");
+    const snapshot = await getDocs(cartRef);
     const invoiceWindow = window.open("", "_blank");
 
-    try {
-      const cartRef = collection(db, "users", user.uid, "cart");
-      const snapshot = await getDocs(cartRef);
+    let total = 0;
+    const items = [];
 
-      let orderTotal = 0;
-      const orderItems = [];
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const qty = data.quantity || 1;
+      const price = Number(data.price);
+      total += price * qty;
+      items.push({ ...data, quantity: qty });
+    }
 
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        const itemPrice = Number(data.price) || 0;
-        orderTotal += itemPrice;
-        orderItems.push(data);
-      }
+    if (items.length === 0) {
+      alert("Your cart is empty!");
+      invoiceWindow.close();
+      return;
+    }
 
-      if (orderItems.length === 0) {
-        alert("Your cart is empty!");
-        invoiceWindow.close();
-        return;
-      }
+    const delivery = 50;
+    const grandTotal = total + delivery;
 
-      const deliveryCharge = 50;
-      const grandTotal = orderTotal + deliveryCharge;
+    await addDoc(collection(db, "users", user.uid, "orders"), {
+      items,
+      total,
+      deliveryCharge: delivery,
+      grandTotal,
+      timestamp: Date.now()
+    });
 
-      await addDoc(collection(db, "orders"), {
-        userId: user.uid,
-        items: orderItems,
-        total: grandTotal,
-        timestamp: Date.now()
-      });
+    const invoiceHTML = `
+      <html>
+      <head><title>Invoice</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h2 { color: #007bff; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #aaa; padding: 10px; text-align: center; }
+          th { background: #f0f0f0; }
+          button { margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+          button:hover { background: #0056b3; }
+        </style>
+      </head>
+      <body>
+        <h2>DressCart — Invoice</h2>
+        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+        <table>
+          <tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th></tr>
+          ${items.map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td>₹${item.price}</td>
+              <td>${item.quantity}</td>
+              <td>₹${item.price * item.quantity}</td>
+            </tr>`).join("")}
+          <tr><td colspan="3">Subtotal</td><td>₹${total}</td></tr>
+          <tr><td colspan="3">Delivery</td><td>₹${delivery}</td></tr>
+          <tr><td colspan="3"><strong>Grand Total</strong></td><td><strong>₹${grandTotal}</strong></td></tr>
+        </table>
+        <p>Thank you for shopping with us!</p>
+        <button onclick="window.print()">Download Invoice</button>
+      </body>
+      </html>
+    `;
 
-      const invoiceHTML = `
-        <html>
-          <head>
-            <title>Order Invoice</title>
-            <style>
-              body { font-family: Arial; padding: 20px; }
-              h2 { text-align: center; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-              .total { font-weight: bold; }
-              .download-btn { margin-top: 20px; text-align: center; }
-            </style>
-          </head>
-          <body>
-            <h2>DressCart - Order Invoice</h2>
-            <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-            <p><strong>User:</strong> ${user.email}</p>
+    invoiceWindow.document.write(invoiceHTML);
+    invoiceWindow.document.close();
 
-            <table>
-              <thead>
-                <tr><th>Item</th><th>Price (₹)</th></tr>
-              </thead>
-              <tbody>
-                ${orderItems.map(item => `
-                  <tr>
-                    <td>${item.name}</td>
-                    <td>₹${Number(item.price).toLocaleString()}</td>
-                  </tr>
-                `).join("")}
-                <tr class="total">
-                  <td>Subtotal</td>
-                  <td>₹${orderTotal.toLocaleString()}</td>
-                </tr>
-                <tr class="total">
-                  <td>Delivery Charge</td>
-                  <td>₹${deliveryCharge}</td>
-                </tr>
-                <tr class="total">
-                  <td>Grand Total</td>
-                  <td>₹${grandTotal.toLocaleString()}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="download-btn">
-              <button onclick="window.print()">🧾 Download / Print Bill</button>
-            </div>
-          </body>
-        </html>
-      `;
-
-      invoiceWindow.document.open();
-      invoiceWindow.document.write(invoiceHTML);
-      invoiceWindow.document.close();
-
-      for (const docSnap of snapshot.docs) {
-        await deleteDoc(doc(db, "users", user.uid, "cart", docSnap.id));
-      }
-
-    } catch (error) {
-      console.error("Error placing order:", error);
-      invoiceWindow.document.body.innerHTML = "<p>Failed to generate invoice.</p>";
+    for (const docSnap of snapshot.docs) {
+      await deleteDoc(doc(db, "users", user.uid, "cart", docSnap.id));
     }
   });
 });

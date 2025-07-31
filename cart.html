@@ -70,7 +70,7 @@
 </head>
 <body>
   <header class="header">
-    <h1>Your Cart</h1>
+    <h1>Product Cart</h1>
     <button onclick="window.location.href='home.html'">← Back to Home</button>
   </header>
 
@@ -119,13 +119,19 @@
         <strong>Date:</strong> ${new Date().toLocaleString()}</p>
         <h3>Items:</h3>
         <table>
-          <tr><th>Item</th><th>Price</th><th>Qty</th></tr>
+          <tr><th>Item</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr>
       `;
 
       items.forEach(item => {
-        const name = item.querySelector('h3').innerText;
-        const price = item.querySelector('p').innerText;
-        invoiceHTML += `<tr><td>${name}</td><td>${price}</td><td>1</td></tr>`;
+        const name = item.querySelector('h3')?.innerText || 'Unnamed';
+        const priceText = item.querySelector('p')?.innerText || '₹0';
+        const qtyInput = item.querySelector('.quantity input');
+        const qty = qtyInput ? parseInt(qtyInput.value) : 1;
+
+        const price = parseInt(priceText.replace(/[^0-9]/g, ''));
+        const subtotal = price * qty;
+
+        invoiceHTML += `<tr><td>${name}</td><td>₹${price}</td><td>${qty}</td><td>₹${subtotal}</td></tr>`;
       });
 
       invoiceHTML += `
